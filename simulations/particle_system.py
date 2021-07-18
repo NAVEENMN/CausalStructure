@@ -36,8 +36,16 @@ class SpringSystem(Environment):
         super().__init__()
         self.p_graph = ParticleGraph()
         self.noise_variance = 0.5
+        self.init_velocity_mean_sd = (1, 1)
         self.k = []
         self.num_particles = 0
+        self.noise = (0.5, 1)
+
+    def set_initial_velocity_mean_sd(self, m_sd):
+        self.init_velocity_mean_sd = m_sd
+
+    def set_noise_mean_sd(self, m_sd):
+        self.noise = m_sd
 
     def get_particle_names(self):
         return self.p_graph.get_node_names()
@@ -79,7 +87,7 @@ class SpringSystem(Environment):
         self.p_graph.add_springs_to_graph(spring_constant_matrix=self.k)
         logging.info(f'Added springs to a spring particle system')
 
-    def simulate(self, total_time_steps, sample_freq, observations):
+    def simulate(self, total_time_steps, sample_freq, observations, traj_id):
         num_particles = self.p_graph.get_total_number_of_particles()
         if num_particles == 0:
             logging.warning('Nothing to simulate, add particles')
@@ -95,11 +103,14 @@ class SpringSystem(Environment):
             loc_std = 0.5
             vel_norm = 0.5
             _position = np.random.randn(2, num_particles) * loc_std
-            _velocity = np.random.randn(2, num_particles)
+            # sample initial velocity from normal distribution
+            _mv = np.random.normal(self.init_velocity_mean_sd[0],
+                                   self.init_velocity_mean_sd[1], 1)
+            _velocity = (_mv + np.random.randn(2, num_particles)) * 0.5
             # Compute magnitude of this velocity vector and format to right shape
-            v_norm = np.linalg.norm(_position, axis=0)
+            #v_norm = np.linalg.norm(_position, axis=0)
             # Scale by magnitude
-            _velocity = _position * vel_norm / v_norm
+            #_velocity = _position * vel_norm / v_norm
             return _position, _velocity
 
         def get_force(k, current_positions):
@@ -113,11 +124,11 @@ class SpringSystem(Environment):
             np.fill_diagonal(k, 0)
             x_cords, y_cords = current_positions[0, :], current_positions[1, :]
             # we are interested in distance between particles not direction
-            x_diffs = np.abs(np.subtract.outer(x_cords, x_cords))
-            y_diffs = np.abs(np.subtract.outer(y_cords, y_cords))
+            x_diffs = np.subtract.outer(x_cords, x_cords)
+            y_diffs = np.subtract.outer(y_cords, y_cords)
             k = np.reshape(k, (self.num_particles, self.num_particles))
 
-            # By Hooke's law Force = -k*dx
+            # By Hooke's law Force = -k * dx
             fx = np.multiply(k, x_diffs)
             fy = np.multiply(k, y_diffs)
             # net forces acting on each particle along x dimension
@@ -144,6 +155,7 @@ class SpringSystem(Environment):
         '''
         velocity = init_velocity + (self._delta_T * init_force_between_particles)
         current_position = init_position
+        step = 0
         for i in range(total_time_steps):
             # Compute new position based on current velocity and positions.
             new_position = current_position + (self._delta_T * velocity)
@@ -155,8 +167,8 @@ class SpringSystem(Environment):
             velocity = new_velocity
             current_position = new_position
             # Add noise to observations
-            current_position += np.random.randn(2, self.num_particles) * self.noise_variance
-            velocity += np.random.randn(2, self.num_particles) * self.noise_variance
+            #current_position += np.random.randn(2, self.num_particles) * self.noise_variance
+            #velocity += np.random.randn(2, self.num_particles) * self.noise_variance
             # add to observations
             if i % sample_freq == 0:
                 observation = {}
@@ -170,7 +182,10 @@ class SpringSystem(Environment):
                         else:
                             # y axis
                             observation[f'p_{particle_id}_y_position'] = current_position[i][j]
+
+                observation[f'trajectory_step'] = f'{traj_id}_{step}'
                 observations.add_an_observation(observation)
+                step += 1
 
 
 def test():
