@@ -36,8 +36,8 @@ class SpringSystem(Environment):
         super().__init__()
         self.p_graph = ParticleGraph()
         self.noise_variance = 0.5
-        self.init_velocity_mean_sd = (1, 1)
-        self.k = []
+        self.init_velocity_mean_sd = (0.01, 1)
+        self.k = np.asarray([])
         self.num_particles = 0
         self.noise = (0.5, 1)
 
@@ -106,12 +106,34 @@ class SpringSystem(Environment):
             # sample initial velocity from normal distribution
             _mv = np.random.normal(self.init_velocity_mean_sd[0],
                                    self.init_velocity_mean_sd[1], 1)
-            _velocity = (_mv + np.random.randn(2, num_particles)) * 0.5
+            _velocity = np.zeros((2, num_particles))#(_mv + np.random.randn(2, num_particles)) * 0.5
             # Compute magnitude of this velocity vector and format to right shape
             #v_norm = np.linalg.norm(_position, axis=0)
             # Scale by magnitude
             #_velocity = _position * vel_norm / v_norm
             return _position, _velocity
+
+        def get_force1(_edges, current_positions):
+            """
+            :param _edges: Adjacency matrix representing mutual causality
+            :param current_positions: current coordinates of all particles
+            :return: net forces acting on all particles.
+            """
+            force_matrix = - 0.5 * _edges
+            np.fill_diagonal(force_matrix, 0)
+            x_cords, y_cords = current_positions[0, :], current_positions[1, :]
+
+            x_diffs = np.subtract.outer(x_cords, x_cords)
+            y_diffs = np.subtract.outer(y_cords, y_cords)
+            distance_matrix = np.sqrt(np.square(x_diffs) + np.square(y_diffs))
+            # By Hooke's law Force = -k * dx
+            force_matrix = np.multiply(-0.5 * _edges, distance_matrix)
+
+            x_diffs = np.subtract.outer(x_cords, x_cords).reshape(1, self.num_particles, self.num_particles)
+            y_diffs = np.subtract.outer(y_cords, y_cords).reshape(1, self.num_particles, self.num_particles)
+            force_matrix = force_matrix.reshape(1, self.num_particles, self.num_particles)
+            _force = (force_matrix * np.concatenate((x_diffs, y_diffs))).sum(axis=-1)
+            return _force
 
         def get_force(k, current_positions):
             """
@@ -120,21 +142,41 @@ class SpringSystem(Environment):
             :return: net forces acting on all particles.
             TODO: Re verify this force computation
             """
-            k = -1 * k
             np.fill_diagonal(k, 0)
             x_cords, y_cords = current_positions[0, :], current_positions[1, :]
+
             # we are interested in distance between particles not direction
             x_diffs = np.subtract.outer(x_cords, x_cords)
             y_diffs = np.subtract.outer(y_cords, y_cords)
-            k = np.reshape(k, (self.num_particles, self.num_particles))
+            distance_matrix = np.sqrt(np.square(x_diffs) + np.square(y_diffs))
 
             # By Hooke's law Force = -k * dx
-            fx = np.multiply(k, x_diffs)
-            fy = np.multiply(k, y_diffs)
+            force = np.multiply(-k, distance_matrix)
+            force_direction = np.full(force.shape, -2)
+            force_direction = np.tril(force_direction, k=0)
+            np.fill_diagonal(force_direction, 0)
+            force_direction = np.add(force_direction, np.ones(force.shape))
+            force = np.multiply(force, force_direction)
+
+            # get force components
+            poc_vec = current_positions / np.linalg.norm(current_positions, axis=0)
+            x_intep, y_intep = poc_vec[0], poc_vec[1]
+
+            # slope = (y2-y1)/(x2-x1)
+            # tan(theta) = slope
+            dif_y = np.subtract.outer(y_intep, y_intep)
+            dif_x = np.subtract.outer(x_intep, x_intep)
+            slopes = np.divide(dif_y, dif_x)
+            slopes = np.nan_to_num(slopes)
+            theta = np.arctan(slopes)
+
+            horizontal_components = np.multiply(force, np.cos(theta))
+            vertical_components = np.multiply(force, np.sin(theta))
+
             # net forces acting on each particle along x dimension
-            nfx = np.reshape(fx.sum(axis=0), (1, self.num_particles))
+            nfx = np.reshape(horizontal_components.sum(axis=0), (1, self.num_particles))
             # net forces acting on each particle along y dimension
-            nfy = np.reshape(fy.sum(axis=0), (1, self.num_particles))
+            nfy = np.reshape(vertical_components.sum(axis=0), (1, self.num_particles))
             # package the results as (2 * num of particles)
             _force = np.concatenate((nfx, nfy), axis=0)
             return _force
@@ -150,19 +192,24 @@ class SpringSystem(Environment):
         F = m * a, for unit mass force is acceleration
         F = a = dv/dt
         dv = dt * F
-        velocity - current_velocity = dt * F
-        velocity = current_velocity + (self._delta_T * F)
+        current_velocity - velocity = dt * F
+        velocity = current_velocity - (self._delta_T * F)
         '''
         velocity = init_velocity + (self._delta_T * init_force_between_particles)
         current_position = init_position
         step = 0
         for i in range(total_time_steps):
-            # Compute new position based on current velocity and positions.
-            new_position = current_position + (self._delta_T * velocity)
             # Compute forces between particles
-            force_between_particles = get_force(self.k, new_position)
+            force_between_particles = get_force1(self.k, current_position)
+
             # Compute new velocity based on current velocity and forces between particles.
-            new_velocity = velocity + (self._delta_T * force_between_particles)
+            new_velocity = velocity - (self._delta_T * force_between_particles)
+
+            # Compute new position based on current velocity and positions.
+            # dx/dt = v
+            # (current_position - new_position) = dt * v
+            new_position = current_position - (self._delta_T * new_velocity)
+
             # Update velocity and position
             velocity = new_velocity
             current_position = new_position

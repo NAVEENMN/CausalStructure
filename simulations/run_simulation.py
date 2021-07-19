@@ -40,10 +40,9 @@ def run_spring_particle_simulation(number_of_simulations=1):
     sp = SpringSystem()
 
     # Configure the particle system
-    sp.add_particles(num_of_particles=3)
-    spring_constants_matrix = np.asarray([[0, 0, 0.5],
-                                          [0, 0, 0],
-                                          [0.5, 0, 0]])
+    sp.add_particles(num_of_particles=2)
+    spring_constants_matrix = np.asarray([[0, 1],
+                                          [1, 0]])
     sp.add_springs(spring_constants_matrix=spring_constants_matrix)
     column_names = ['trajectory_step']
     column_names.extend([f'p_{particle_id}_x_position' for particle_id in range(sp.get_particles_count())])
