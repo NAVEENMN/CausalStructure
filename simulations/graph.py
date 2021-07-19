@@ -33,6 +33,10 @@ class Graph(object):
                             weight=_w.item(0),
                             capacity=_c.item(0))
 
+    def remove_an_edge_from_graph(self, node_a, node_b):
+        logging.info(f'*** Graph: Removing an edge {node_a}-{node_b}')
+        self.graph.remove_edge(node_a, node_b)
+
     def get_graph(self):
         return self.graph
 
@@ -133,6 +137,10 @@ class ParticleGraph(Graph):
         self.spring_count += 1
         self.add_an_edge_to_graph(y, x, weight=spring_constant)
         self.add_an_edge_to_graph(y, z, weight=spring_constant)
+
+    def remove_spring_from_graph(self, node_a, node_b):
+        self.remove_an_edge_from_graph(node_a=node_a, node_b=node_b)
+        self.spring_count -= 1
 
     def add_springs_to_graph(self, spring_constant_matrix):
         # Since spring constant matrix is symmetric nullify lower half

@@ -87,6 +87,10 @@ class SpringSystem(Environment):
         self.p_graph.add_springs_to_graph(spring_constant_matrix=self.k)
         logging.info(f'Added springs to a spring particle system')
 
+    def remove_spring(self, particle_a, particle_b):
+        self.k[particle_a][particle_b] = 0.0
+        logging.info(f'Removed Spring p_{particle_a} p_{particle_b}')
+
     def simulate(self, total_time_steps, sample_freq, observations, traj_id):
         num_particles = self.p_graph.get_total_number_of_particles()
         if num_particles == 0:
@@ -106,7 +110,7 @@ class SpringSystem(Environment):
             # sample initial velocity from normal distribution
             _mv = np.random.normal(self.init_velocity_mean_sd[0],
                                    self.init_velocity_mean_sd[1], 1)
-            _velocity = np.zeros((2, num_particles))#(_mv + np.random.randn(2, num_particles)) * 0.5
+            _velocity = (_mv + np.random.randn(2, num_particles)) * 0.5
             # Compute magnitude of this velocity vector and format to right shape
             #v_norm = np.linalg.norm(_position, axis=0)
             # Scale by magnitude

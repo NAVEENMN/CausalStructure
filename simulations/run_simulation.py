@@ -40,16 +40,23 @@ def run_spring_particle_simulation(number_of_simulations=1):
     sp = SpringSystem()
 
     # Configure the particle system
-    sp.add_particles(num_of_particles=2)
-    spring_constants_matrix = np.asarray([[0, 1],
-                                          [1, 0]])
-    sp.add_springs(spring_constants_matrix=spring_constants_matrix)
+    num_of_particles = 3
+    sp.add_particles(num_of_particles)
+    sp.set_initial_velocity_mean_sd((0.5, 1))
+
+    # Configure the observations for recording
     column_names = ['trajectory_step']
     column_names.extend([f'p_{particle_id}_x_position' for particle_id in range(sp.get_particles_count())])
     column_names.extend([f'p_{particle_id}_y_position' for particle_id in range(sp.get_particles_count())])
     obs = Observations(columns=column_names)
+
+    # Run simulation
     for i in range(number_of_simulations):
         logging.info(f'*** Running: Simulation {i}')
+
+        spring_constants_matrix = np.random.rand(num_of_particles, num_of_particles)
+        sp.add_springs(spring_constants_matrix=spring_constants_matrix)
+        sp.remove_spring(particle_a=0, particle_b=1)
         # total_time_steps: run simulation with the current configuration for total_time_steps
         # sample_freq : make an observation for every sample_freq step.
         sp.simulate(total_time_steps=10000,
@@ -57,11 +64,13 @@ def run_spring_particle_simulation(number_of_simulations=1):
                     sample_freq=20,
                     traj_id=i)
     logging.info(f'*** Complete: Simulation')
+
+    # Save observations to a csv file
     obs.save_observations()
 
 
 def main():
-    run_spring_particle_simulation(number_of_simulations=1)
+    run_spring_particle_simulation(number_of_simulations=5)
 
 
 if __name__ == "__main__":
