@@ -21,7 +21,7 @@ class Graph(object):
                                       create_using=nx.DiGraph)
 
     def add_node_to_graph(self, node):
-        logging.info(f'*** Graph: Adding a node {node}')
+        logging.debug(f'*** Graph: Adding a node {node}')
         self.graph.add_node(node, value=np.random.randn())
 
     def add_an_edge_to_graph(self, node_a, node_b, weight=None):
@@ -34,7 +34,7 @@ class Graph(object):
                             capacity=_c.item(0))
 
     def remove_an_edge_from_graph(self, node_a, node_b):
-        logging.info(f'*** Graph: Removing an edge {node_a}-{node_b}')
+        logging.debug(f'*** Graph: Removing an edge {node_a}-{node_b}')
         self.graph.remove_edge(node_a, node_b)
 
     def get_graph(self):
@@ -121,7 +121,7 @@ class ParticleGraph(Graph):
 
     def add_particle_node_to_graph(self, name=None):
         _node = name if name else f'p_{self.get_total_nodes()}'
-        logging.info(f'*** ParticleGraph: Adding a node to graph {name}')
+        logging.debug(f'*** ParticleGraph: Adding a node to graph {name}')
         self.add_node_to_graph(_node)
         self.particle_count += 1
         return _node
@@ -132,7 +132,7 @@ class ParticleGraph(Graph):
         x = particle_a
         z = particle_b
         y = f's{self.get_total_nodes()}'
-        logging.info(f'*** ParticleGraph: Adding a spring {particle_a}-{particle_b}:{spring_constant}')
+        logging.debug(f'*** ParticleGraph: Adding a spring {particle_a}-{particle_b}:{spring_constant}')
         self.add_node_to_graph(y)
         self.spring_count += 1
         self.add_an_edge_to_graph(y, x, weight=spring_constant)

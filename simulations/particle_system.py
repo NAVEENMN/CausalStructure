@@ -40,9 +40,16 @@ class SpringSystem(Environment):
         self.k = np.asarray([])
         self.num_particles = 0
         self.noise = (0.5, 1)
+        # In space the periodic interactions between particles go on to infinity
+        # In real world however system would loose energy slows down by damp_factor.
+        # (rapid) 0.0 < damp < 1.0 (no damp)
+        self.damp_factor = 1.0
 
     def set_initial_velocity_mean_sd(self, m_sd):
         self.init_velocity_mean_sd = m_sd
+
+    def set_damp_factor(self, value):
+        self.damp_factor = value
 
     def set_noise_mean_sd(self, m_sd):
         self.noise = m_sd
@@ -61,10 +68,26 @@ class SpringSystem(Environment):
         for _ in range(num_of_particles):
             self.p_graph.add_particle_node_to_graph()
         self.num_particles = self.p_graph.get_total_number_of_particles()
+        logging.debug(f'Initialized springs to 0.0')
+        # initialize springs
+        self.k = np.zeros((self.num_particles, self.num_particles))
         logging.info(f'Created a spring particle system with {num_of_particles} particles')
 
     def show_graph(self):
         self.p_graph.show()
+
+    def add_a_spring(self, particle_a, particle_b, spring_constant):
+        num_of_particles = self.p_graph.get_total_number_of_particles()
+        if num_of_particles == 0:
+            logging.error('Environment has no particles to add a spring')
+            return
+
+        self.k[particle_a][particle_b] = spring_constant
+        self.k[particle_b][particle_a] = spring_constant
+        self.p_graph.add_spring_to_graph(particle_a=particle_a,
+                                         particle_b=particle_b,
+                                         spring_constant=spring_constant)
+        logging.info(f'Added spring to a {particle_a} {particle_b} : {spring_constant}')
 
     def add_springs(self, spring_constants_matrix):
 
@@ -91,7 +114,7 @@ class SpringSystem(Environment):
         self.k[particle_a][particle_b] = 0.0
         logging.info(f'Removed Spring p_{particle_a} p_{particle_b}')
 
-    def simulate(self, total_time_steps, sample_freq, observations, traj_id):
+    def simulate(self, total_time_steps, sample_freq, observations, spring_observations, traj_id):
         num_particles = self.p_graph.get_total_number_of_particles()
         if num_particles == 0:
             logging.warning('Nothing to simulate, add particles')
@@ -110,7 +133,8 @@ class SpringSystem(Environment):
             # sample initial velocity from normal distribution
             _mv = np.random.normal(self.init_velocity_mean_sd[0],
                                    self.init_velocity_mean_sd[1], 1)
-            _velocity = (_mv + np.random.randn(2, num_particles)) * 0.5
+            logging.info(f'Initial velocity set to {_mv}')
+            _velocity = (_mv + np.random.randn(2, num_particles)) * 0.01
             # Compute magnitude of this velocity vector and format to right shape
             #v_norm = np.linalg.norm(_position, axis=0)
             # Scale by magnitude
@@ -127,11 +151,11 @@ class SpringSystem(Environment):
             np.fill_diagonal(force_matrix, 0)
             x_cords, y_cords = current_positions[0, :], current_positions[1, :]
 
-            x_diffs = np.subtract.outer(x_cords, x_cords)
-            y_diffs = np.subtract.outer(y_cords, y_cords)
-            distance_matrix = np.sqrt(np.square(x_diffs) + np.square(y_diffs))
+            #x_diffs = np.subtract.outer(x_cords, x_cords)
+            #y_diffs = np.subtract.outer(y_cords, y_cords)
+            #distance_matrix = np.sqrt(np.square(x_diffs) + np.square(y_diffs))
             # By Hooke's law Force = -k * dx
-            force_matrix = np.multiply(-0.5 * _edges, distance_matrix)
+            #force_matrix = np.multiply(-0.5 * _edges, distance_matrix)
 
             x_diffs = np.subtract.outer(x_cords, x_cords).reshape(1, self.num_particles, self.num_particles)
             y_diffs = np.subtract.outer(y_cords, y_cords).reshape(1, self.num_particles, self.num_particles)
@@ -207,12 +231,12 @@ class SpringSystem(Environment):
             force_between_particles = get_force1(self.k, current_position)
 
             # Compute new velocity based on current velocity and forces between particles.
-            new_velocity = velocity - (self._delta_T * force_between_particles)
+            new_velocity = velocity + (self._delta_T * force_between_particles)
 
             # Compute new position based on current velocity and positions.
             # dx/dt = v
             # (current_position - new_position) = dt * v
-            new_position = current_position - (self._delta_T * new_velocity)
+            new_position = current_position + (self._delta_T * new_velocity)
 
             # Update velocity and position
             velocity = new_velocity
@@ -221,23 +245,47 @@ class SpringSystem(Environment):
             #current_position += np.random.randn(2, self.num_particles) * self.noise_variance
             #velocity += np.random.randn(2, self.num_particles) * self.noise_variance
             # add to observations
-            if i % sample_freq == 0:
-                observation = {}
-                # Adding all positions
-                for i in range(len(current_position)):
-                    for j in range(len(current_position[0])):
-                        particle_id = j
-                        if i == 0:
-                            # x axis
-                            observation[f'p_{particle_id}_x_position'] = current_position[i][j]
-                        else:
-                            # y axis
-                            observation[f'p_{particle_id}_y_position'] = current_position[i][j]
 
-                observation[f'trajectory_step'] = f'{traj_id}_{step}'
-                observations.add_an_observation(observation)
+            if i % sample_freq == 0:
+                self.add_observation(observations, spring_observations, traj_id, step, self.k, current_position, velocity)
                 step += 1
 
+    def add_observation(self, observations, spring_observations, traj_id, step, springs, positions, velocity):
+        # local dict to collect readings
+        observation = {}
+        sp_observation = {}
+
+        # Adding all positions, velocity
+        for i in range(len(positions)):
+            for j in range(len(positions[0])):
+                particle_id = j
+                if i == 0:
+                    # x axis
+                    observation[f'p_{particle_id}_x_position'] = positions[i][j]
+                    observation[f'p_{particle_id}_x_velocity'] = velocity[i][j]
+                else:
+                    # y axis
+                    observation[f'p_{particle_id}_y_position'] = positions[i][j]
+                    observation[f'p_{particle_id}_y_velocity'] = velocity[i][j]
+
+        # Calculate and store distance
+        x_cords, y_cords = positions[0, :], positions[1, :]
+        x_diffs = np.subtract.outer(x_cords, x_cords)
+        y_diffs = np.subtract.outer(y_cords, y_cords)
+        distance_matrix = np.sqrt(np.square(x_diffs) + np.square(y_diffs))
+        for i in range(len(distance_matrix)):
+            for j in range(len(distance_matrix[0])):
+                observation[f'p_{i}_{j}_distance'] = distance_matrix[i][j]
+
+        for i in range(self.num_particles):
+            for j in range(self.num_particles):
+                sp_observation[f's_{i}_{j}'] = springs[i][j]
+
+        observation[f'trajectory_step'] = f'{traj_id}_{step}'
+        sp_observation[f'trajectory_step'] = f'{traj_id}_{step}'
+        # Add observation to global record
+        observations.add_an_observation(observation)
+        spring_observations.add_an_observation(sp_observation)
 
 def test():
     sp = SpringSystem()
