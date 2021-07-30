@@ -6,10 +6,12 @@ Simulates a chosen system
 writes observational data and schema to /data
 """
 import os
+import time
 import logging
 import pandas as pd
 import numpy as np
 from particle_system import SpringSystem
+from multiprocessing import Process
 
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.DEBUG)
 
@@ -35,12 +37,14 @@ class Observations(object):
         logging.info("*** Saving: observations")
         df = pd.DataFrame(self.observations).set_index('trajectory_step')
         _dir = os.path.split(os.getcwd())[0]
-        df.to_csv(os.path.join(_dir, 'data', f'{name}.csv'))
+        df.to_csv(os.path.join(_dir, 'data/simulations', f'{name}.csv'))
         logging.info(f"*** Saved: observations {name}.csv")
 
 
-def run_spring_particle_simulation(number_of_simulations=1):
-    num_of_particles = 3
+def run_spring_particle_simulation(_id=0):
+    num_of_particles = 4
+    trajectory_length = 100000
+    sample_freq = 50
 
     # Create Observation records
     particle_observations = Observations()
@@ -64,30 +68,34 @@ def run_spring_particle_simulation(number_of_simulations=1):
     spring_observations.set_column_names(columns=spring_observation_columns)
 
     # Run simulation
-    for i in range(number_of_simulations):
-        # Configure the particle system
-        sp = SpringSystem()
-        sp.add_particles(num_of_particles)
-        sp.set_initial_velocity_mean_sd((0.0, 0.0001))
-        logging.info(f'*** Running: Simulation {i}')
-        sp.add_a_spring(particle_a=1, particle_b=2, spring_constant=np.random.normal(2, 0.5, 1))
-        # total_time_steps: run simulation with the current configuration for total_time_steps
-        # sample_freq : make an observation for every sample_freq step.
-        # For a good trajectory longer time_steps recommended
-        sp.simulate(total_time_steps=100000,
-                    observations=particle_observations,
-                    spring_observations=spring_observations,
-                    sample_freq=100,
-                    traj_id=i)
+    # Configure the particle system
+    sp = SpringSystem()
+    sp.add_particles(num_of_particles)
+    sp.set_initial_velocity_mean_sd((0.0, 0.0001))
+    logging.info(f'*** Running: Simulation {_id}')
+    sp.add_a_spring(particle_a=0, particle_b=1, spring_constant=np.random.normal(2, 0.5, 1))
+    # total_time_steps: run simulation with the current configuration for total_time_steps
+    # sample_freq : make an observation for every sample_freq step.
+    # For a good trajectory longer time_steps recommended
+    sp.simulate(total_time_steps=trajectory_length,
+                observations=particle_observations,
+                spring_observations=spring_observations,
+                sample_freq=sample_freq,
+                traj_id=_id)
     logging.info(f'*** Complete: Simulation')
 
     # Save observations to a csv file
-    particle_observations.save_observations(name='observations')
-    spring_observations.save_observations(name='springs')
+    particle_observations.save_observations(name=f'observations_{_id}')
+    spring_observations.save_observations(name=f'springs_{_id}')
 
 
 def main():
-    run_spring_particle_simulation(number_of_simulations=100)
+    start = time.time()
+    from multiprocessing import Pool
+    _args = range(100)
+    with Pool(4) as p:
+        p.map(run_spring_particle_simulation, _args)
+    print(f'Total time taken: {time.time() - start}')
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import os
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import logging
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
@@ -9,16 +10,35 @@ logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 class Utils(object):
 
     @classmethod
-    def plots_trajectory(cls, loc='data/observations.csv'):
+    def plots_trajectory(cls, oloc='data/observations.csv', sloc='data/springs.csv'):
         import seaborn as sns
+        import glob
         # Pick a random subsequence from observations and plot trajectory
-        observations = pd.read_csv(loc)
+        observations = pd.read_csv(oloc)
         particle_count = 0
         for col in observations.columns:
             if 'position' in col:
                 particle_count += 1
         particle_count /= 2
         particle_count = int(particle_count)
+
+        springs = pd.read_csv(sloc)
+        springs_matrix = []
+        columns = [f'particle_{i}' for i in range(particle_count)]
+        for time_step in range(0, observations.shape[0]):
+            entries = []
+            s_mat = []
+            for p_a in range(particle_count):
+                for p_b in range(particle_count):
+                    s_mat.append(springs.iloc[time_step][f's_{p_a}_{p_b}'])
+            s_mat = np.reshape(s_mat, (particle_count, particle_count))
+            springs_matrix.append(pd.DataFrame(s_mat, columns=columns, index=columns))
+
+        # delete all png files.
+        fp_in = f"{os.getcwd()}/media/timestep_*.png"
+        for f in glob.glob(fp_in):
+            os.remove(f)
+
         for time_step in range(0, observations.shape[0]):
             fig, axes = plt.subplots(1, 2, figsize=(10, 5))
             axes[0].set_title('Position')
@@ -32,7 +52,7 @@ class Utils(object):
                 entries.append(data)
             pdframe = pd.DataFrame(entries)
             pl = sns.scatterplot(data=pdframe, x='x_cordinate', y='y_cordinate', hue='particle', ax=axes[0])
-            #sns.heatmap(self.edges[time_step], vmin=0.0, vmax=1.0, ax=axes[1])
+            sns.heatmap(springs_matrix[time_step], vmin=0.0, vmax=1.0, ax=axes[1])
             pl.set_ylim(-5.0, 5.0)
             pl.set_xlim(-5.0, 5.0)
             plt.savefig(f"{os.getcwd()}/media/timestep_{time_step}.png")
@@ -51,6 +71,7 @@ class Utils(object):
         from PIL import Image
 
         fcont = len(glob.glob(f"{os.getcwd()}/media/timestep_*.png"))
+        print(f'Creating gif with {fcont} images')
         # ref: https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif
         img, *imgs = [Image.open(f"{os.getcwd()}/media/timestep_{i}.png") for i in range(1, fcont)]
         img.save(fp=f"{os.getcwd()}/media/{loc}.gif",
