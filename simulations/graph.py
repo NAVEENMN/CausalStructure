@@ -35,7 +35,12 @@ class Graph(object):
 
     def remove_an_edge_from_graph(self, node_a, node_b):
         logging.debug(f'*** Graph: Removing an edge {node_a}-{node_b}')
-        self.graph.remove_edge(node_a, node_b)
+        if self.graph.has_edge(node_a, node_b):
+            logging.debug(f'*** Graph: Removed an edge {node_a}-{node_b}')
+            self.graph.remove_edge(node_a, node_b)
+            return True
+        logging.debug(f'*** Graph: No edge {node_a}-{node_b} found')
+        return False
 
     def get_graph(self):
         return self.graph
@@ -139,8 +144,10 @@ class ParticleGraph(Graph):
         self.add_an_edge_to_graph(y, z, weight=spring_constant)
 
     def remove_spring_from_graph(self, node_a, node_b):
-        self.remove_an_edge_from_graph(node_a=node_a, node_b=node_b)
-        self.spring_count -= 1
+        if self.remove_an_edge_from_graph(node_a=node_a, node_b=node_b):
+            self.spring_count -= 1
+            return True
+        return False
 
     def add_springs_to_graph(self, spring_constant_matrix):
         # Since spring constant matrix is symmetric nullify lower half
@@ -149,8 +156,8 @@ class ParticleGraph(Graph):
             for j in range(self.particle_count):
                 if spring_constant_matrix[i][j] != 0:
                     logging.info(f'Adding spring between particle_{i} and particle_{j} with k={spring_constant_matrix[i][j]} ')
-                    self.add_spring_to_graph(particle_a=f'p{i}',
-                                             particle_b=f'p{j}',
+                    self.add_spring_to_graph(particle_a=f'p_{i}',
+                                             particle_b=f'p_{j}',
                                              spring_constant=spring_constant_matrix[i][j])
 
     def show(self):

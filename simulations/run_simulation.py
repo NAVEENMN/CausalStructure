@@ -36,15 +36,21 @@ class Observations(object):
     def save_observations(self, name):
         logging.info("*** Saving: observations")
         df = pd.DataFrame(self.observations).set_index('trajectory_step')
+        # index represents most reset observation
+        df = df[::-1]
         _dir = os.path.split(os.getcwd())[0]
         df.to_csv(os.path.join(_dir, 'data/simulations', f'{name}.csv'))
         logging.info(f"*** Saved: observations {name}.csv")
 
 
 def run_spring_particle_simulation(_id=0):
+    # *** Control Variables ***
     num_of_particles = 4
     trajectory_length = 100000
     sample_freq = 50
+    # Zero implies static edges
+    period = 500
+    # ********
 
     # Create Observation records
     particle_observations = Observations()
@@ -73,11 +79,18 @@ def run_spring_particle_simulation(_id=0):
     sp.add_particles(num_of_particles)
     sp.set_initial_velocity_mean_sd((0.0, 0.0001))
     logging.info(f'*** Running: Simulation {_id}')
-    sp.add_a_spring(particle_a=0, particle_b=1, spring_constant=np.random.normal(2, 0.5, 1))
+
+    # *** Control Variable ***
+    sp.add_a_spring(particle_a=0,
+                    particle_b=1,
+                    spring_constant=np.random.normal(2, 0.5, 1))
+    # ********
+
     # total_time_steps: run simulation with the current configuration for total_time_steps
     # sample_freq : make an observation for every sample_freq step.
     # For a good trajectory longer time_steps recommended
     sp.simulate(total_time_steps=trajectory_length,
+                period=period,
                 observations=particle_observations,
                 spring_observations=spring_observations,
                 sample_freq=sample_freq,
@@ -92,9 +105,9 @@ def run_spring_particle_simulation(_id=0):
 def main():
     start = time.time()
     from multiprocessing import Pool
-    _args = range(100)
+    number_of_simulations = range(10)
     with Pool(4) as p:
-        p.map(run_spring_particle_simulation, _args)
+        p.map(run_spring_particle_simulation, number_of_simulations)
     print(f'Total time taken: {time.time() - start}')
 
 

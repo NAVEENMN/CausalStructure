@@ -112,9 +112,21 @@ class SpringSystem(Environment):
 
     def remove_spring(self, particle_a, particle_b):
         self.k[particle_a][particle_b] = 0.0
+        self.p_graph.remove_spring_from_graph(node_a=particle_a, node_b=particle_b)
         logging.info(f'Removed Spring p_{particle_a} p_{particle_b}')
 
-    def simulate(self, total_time_steps, sample_freq, observations, spring_observations, traj_id):
+    def remove_all_springs(self):
+        num_of_particles = self.p_graph.get_total_number_of_particles()
+        self.k = np.zeros(shape=(num_of_particles, num_of_particles))
+        particle_names = self.p_graph.get_node_names()
+        for particle_a in particle_names:
+            for particle_b in particle_names:
+                if particle_a != particle_b:
+                    self.p_graph.remove_spring_from_graph(node_a=particle_a,
+                                                          node_b=particle_b)
+
+
+    def simulate(self, total_time_steps, period, sample_freq, observations, spring_observations, traj_id):
         num_particles = self.p_graph.get_total_number_of_particles()
         if num_particles == 0:
             logging.warning('Nothing to simulate, add particles')
@@ -226,6 +238,8 @@ class SpringSystem(Environment):
         velocity = init_velocity + (self._delta_T * init_force_between_particles)
         current_position = init_position
         step = 0
+        original_springs = self.k
+        flip_flag = True
         for i in range(total_time_steps):
             # Compute forces between particles
             force_between_particles = get_force1(self.k, current_position)
@@ -249,6 +263,19 @@ class SpringSystem(Environment):
             if i % sample_freq == 0:
                 self.add_observation(observations, spring_observations, traj_id, step, self.k, current_position, velocity)
                 step += 1
+
+            if period != 0 and i % period == 0:
+                if flip_flag:
+                    logging.info(f'*** Simulation: Step {i} Flipping edges (Removing)')
+                    self.remove_all_springs()
+                    flip_flag = False
+                else:
+                    logging.info(f'*** Simulation: Step {i} Flipping edges (Restoring)')
+                    self.add_springs(spring_constants_matrix=original_springs)
+                    flip_flag = True
+
+
+
 
     def add_observation(self, observations, spring_observations, traj_id, step, springs, positions, velocity):
         # local dict to collect readings
